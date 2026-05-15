@@ -57,7 +57,54 @@ def insert_single(session, mesure):
     TODO: Insérer une seule mesure dans mesures_par_capteur
     Utiliser une prepared statement
     """
-    pass
+    query = session.prepare("""
+
+        INSERT INTO mesures_par_capteur (
+
+            capteur_id,
+            date_jour,
+            timestamp,
+            wilaya,
+            commune,
+            tension_v,
+            courant_a,
+            puissance_kw,
+            frequence_hz,
+            temperature,
+            alerte
+
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        USING TTL 7776000
+    """)
+
+    session.execute(query, (
+
+        mesure["capteur_id"],
+
+        mesure["date_jour"],
+
+        mesure["timestamp"],
+
+        mesure["wilaya"],
+
+        mesure["commune"],
+
+        mesure["tension_v"],
+
+        mesure["courant_a"],
+
+        mesure["puissance_kw"],
+
+        mesure["frequence_hz"],
+
+        mesure["temperature"],
+
+        mesure["alerte"]
+    ))
+
 
 
 def insert_batch(session, mesures: list):
@@ -66,7 +113,78 @@ def insert_batch(session, mesures: list):
     Utiliser UNLOGGED BATCH pour les séries temporelles
     Faire des batches de max 50 items (bonne pratique Cassandra)
     """
-    pass
+
+    prepared = session.prepare("""
+
+        INSERT INTO mesures_par_capteur (
+
+            capteur_id,
+            date_jour,
+            timestamp,
+            wilaya,
+            commune,
+            tension_v,
+            courant_a,
+            puissance_kw,
+            frequence_hz,
+            temperature,
+            alerte
+
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        USING TTL 7776000
+    """)
+
+    batch = BatchStatement(
+        batch_type=BatchType.UNLOGGED
+    )
+
+    compteur = 0
+
+    for mesure in mesures:
+
+        batch.add(prepared, (
+
+            mesure["capteur_id"],
+
+            mesure["date_jour"],
+
+            mesure["timestamp"],
+
+            mesure["wilaya"],
+
+            mesure["commune"],
+
+            mesure["tension_v"],
+
+            mesure["courant_a"],
+
+            mesure["puissance_kw"],
+
+            mesure["frequence_hz"],
+
+            mesure["temperature"],
+
+            mesure["alerte"]
+        ))
+
+        compteur += 1
+
+        if compteur == 50:
+
+            session.execute(batch)
+
+            batch = BatchStatement(
+                batch_type=BatchType.UNLOGGED
+            )
+
+            compteur = 0
+
+    if compteur > 0:
+        session.execute(batch)
+    
 
 
 def run_ingestion(session):
@@ -82,6 +200,53 @@ def run_ingestion(session):
     """
     print(f"Démarrage ingestion : {NB_CAPTEURS} capteurs × {MINUTES_HISTORIQUE} min")
     start = time.time()
+    capteurs = []
+
+    # Génération capteurs
+
+    for _ in range(NB_CAPTEURS):
+
+        wilaya = random.choice(WILAYAS)
+
+        commune = random.choice(COMMUNES[wilaya])
+
+        capteurs.append({
+
+            "id": uuid.uuid4(),
+
+            "wilaya": wilaya,
+
+            "commune": commune
+        })
+
+    toutes_mesures = []
+
+    now = datetime.now()
+
+    # Génération historique
+
+    for minute in range(MINUTES_HISTORIQUE):
+
+        current_time = now - timedelta(minutes=minute)
+
+        for capteur in capteurs:
+
+            mesure = generate_mesure(
+
+                capteur["id"],
+
+                capteur["wilaya"],
+
+                capteur["commune"],
+
+                current_time
+            )
+
+            toutes_mesures.append(mesure)
+
+     # Insertion batch
+
+    insert_batch(session, toutes_mesures)
     
     # TODO: Implémenter
     

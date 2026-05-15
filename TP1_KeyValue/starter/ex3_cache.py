@@ -34,16 +34,30 @@ def get_product_cached(r, product_id: int, ttl: int = 600) -> Optional[dict]:
     
     # TODO: Implémenter le pattern Cache-Aside
     # Utiliser json.dumps/json.loads pour sérialiser
+    cache_key = f"product_cache:{product_id}"
     
-    elapsed = time.time() - start
-    # TODO: Afficher "CACHE HIT (Xms)" ou "CACHE MISS (Xms)"
-    pass
+    cached_product = r.get(cache_key)
+    
+    if cached_product:
+        elapsed = (time.time() - start) * 1000
+        print(f"CACHE HIT ({elapsed:.2f}ms)")
+        return json.loads(cached_product)
+    
+    product = slow_db_get_product(product_id)
+    
+    if product:
+        r.set(cache_key, json.dumps(product), ex=ttl)
+    
+    elapsed = (time.time() - start) * 1000
+    print(f"CACHE MISS ({elapsed:.2f}ms)")
+    
+    return product
 
 
 def invalidate_product_cache(r, product_id: int):
     """Supprimer le cache d'un produit (après mise à jour en DB)"""
     # TODO
-    pass
+    r.delete(f"product_cache:{product_id}")
 
 
 def benchmark_cache(r, product_id: int, iterations: int = 20):
@@ -55,7 +69,39 @@ def benchmark_cache(r, product_id: int, iterations: int = 20):
     - Taux de cache hit (%)
     """
     # TODO
-    pass
+    hit_times = []
+    miss_times = []
+    hits = 0
+    misses = 0
+
+    for i in range(iterations):
+        if i == 0:
+            invalidate_product_cache(r, product_id)
+
+        start = time.time()
+
+        cache_exists = r.exists(f"product_cache:{product_id}")
+
+        get_product_cached(r, product_id)
+
+        elapsed = (time.time() - start) * 1000
+
+        if cache_exists:
+            hits += 1
+            hit_times.append(elapsed)
+        else:
+            misses += 1
+            miss_times.append(elapsed)
+
+    avg_hit = sum(hit_times) / len(hit_times) if hit_times else 0
+    avg_miss = sum(miss_times) / len(miss_times) if miss_times else 0
+
+    hit_rate = (hits / iterations) * 100
+
+    print("\n===== RESULTATS =====")
+    print(f"Temps moyen HIT : {avg_hit:.2f}ms")
+    print(f"Temps moyen MISS : {avg_miss:.2f}ms")
+    print(f"Taux de HIT : {hit_rate:.2f}%")
 
 
 if __name__ == "__main__":

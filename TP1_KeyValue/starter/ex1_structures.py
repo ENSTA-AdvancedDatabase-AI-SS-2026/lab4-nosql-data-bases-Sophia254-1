@@ -2,6 +2,8 @@
 TP1 - Exercice 1 : Structures de données Redis
 Use Case : ShopFast - Gestion des produits, paniers et navigation
 """
+from itertools import product
+
 import redis
 import json
 
@@ -17,7 +19,7 @@ def store_product(r, product_id, product_data: dict):
     >>> store_product(r, 1, {"name": "Samsung A54", "price": 65000, "category": "phones", "stock": 15})
     """
     # TODO: Implémenter avec HSET
-    pass
+    r.hset(f"product:{product_id}", mapping=product_data)
 
 
 def get_product(r, product_id):
@@ -26,7 +28,12 @@ def get_product(r, product_id):
     Retourner None si le produit n'existe pas
     """
     # TODO: Implémenter avec HGETALL
-    pass
+    product = r.hgetall(f"product:{product_id}")
+
+    if product:
+        return product
+
+    return None
 
 
 def add_to_cart(r, user_id, product_id, quantity: int = 1):
@@ -36,7 +43,7 @@ def add_to_cart(r, user_id, product_id, quantity: int = 1):
     Champ : product_id → quantité
     """
     # TODO: Implémenter avec HINCRBY
-    pass
+    r.hincrby(f"cart:{user_id}", product_id, quantity)
 
 
 def get_cart(r, user_id):
@@ -45,7 +52,7 @@ def get_cart(r, user_id):
     Retourner un dict {product_id: quantity}
     """
     # TODO
-    pass
+    return r.hgetall(f"cart:{user_id}")
 
 
 def record_view(r, user_id, product_id, max_history: int = 10):
@@ -56,13 +63,15 @@ def record_view(r, user_id, product_id, max_history: int = 10):
     Astuce : LPUSH + LTRIM
     """
     # TODO
-    pass
+    key = f"history:{user_id}"
+    r.lpush(key, product_id)
+    r.ltrim(key, 0, max_history - 1)
 
 
 def get_history(r, user_id):
     """Récupérer l'historique de navigation"""
     # TODO
-    pass
+    return r.lrange(f"history:{user_id}", 0, -1)
 
 
 def add_product_to_category(r, category: str, product_id):
@@ -71,7 +80,7 @@ def add_product_to_category(r, category: str, product_id):
     Clé : "category:{category}" (Set)
     """
     # TODO: Utiliser SADD
-    pass
+    r.sadd(f"category:{category}", product_id)
 
 
 def get_products_in_categories(r, *categories):
@@ -81,7 +90,10 @@ def get_products_in_categories(r, *categories):
     Astuce : SINTER
     """
     # TODO
-    pass
+    if not categories:
+        return set()
+    keys = [f"category:{cat}" for cat in categories]
+    return r.sinter(*keys)
 
 
 if __name__ == "__main__":
